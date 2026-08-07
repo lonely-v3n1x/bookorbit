@@ -5,6 +5,9 @@ import { useAuth } from '@/features/auth/composables/useAuth'
 import { useChangePasswordDialog } from '@/composables/useChangePasswordDialog'
 import { useSetupStatus } from '@/features/auth/composables/useSetupStatus'
 
+/** Routes that can be used without a network connection while offline-booted. */
+const OFFLINE_ROUTES = new Set(['offline', 'reader'])
+
 export function registerAuthGuard(router: Router): void {
   router.beforeEach(async (to) => {
     const { fetchSetupStatus } = useSetupStatus()
@@ -30,8 +33,9 @@ export function registerAuthGuard(router: Router): void {
     if (!user.value) {
       // Offline boot with a stored session: land on the downloaded shelf instead of the login page.
       if (offlineBooted.value && getStoredAccessToken()) {
-        if (to.name !== 'offline') return { name: 'offline' }
-        return true
+        // Only routes that work fully offline may be visited: the downloaded shelf and the reader.
+        if (typeof to.name === 'string' && OFFLINE_ROUTES.has(to.name)) return true
+        return { name: 'offline' }
       }
       return { path: '/login', query: { redirect: to.fullPath } }
     }

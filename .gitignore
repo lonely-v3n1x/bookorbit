@@ -30,6 +30,8 @@ local/
 coverage/
 *.tsbuildinfo
 server/src/metadata.ts
+server/public
+
 
 # Test results (generated artifacts - uploaded to CI, not committed)
 test-results/
