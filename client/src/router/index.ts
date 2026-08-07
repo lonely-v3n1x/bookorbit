@@ -271,6 +271,12 @@ export const routes: RouteRecordRaw[] = [
         meta: { title: () => t('titles.bookDock') },
       },
       {
+        path: '/offline',
+        name: 'offline',
+        component: () => import('@/views/OfflineBooksView.vue'),
+        meta: { public: true, title: () => t('titles.offline') },
+      },
+      {
         path: '/whats-new',
         name: 'whats-new',
         component: () => import('@/features/whats-new/WhatsNewView.vue'),

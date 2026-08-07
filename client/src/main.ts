@@ -1,5 +1,6 @@
 import './assets/main.css'
 import './lib/echarts'
+import { initOffline, refreshOfflineState } from './lib/offline'
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
@@ -58,6 +59,10 @@ const { init } = useAuth()
 if (needsSetup.value !== true) {
   await init()
 }
+
+// Offline support: connectivity listeners, outbox flush, and download metadata.
+initOffline()
+void refreshOfflineState()
 
 app.use(router)
 app.mount('#app')

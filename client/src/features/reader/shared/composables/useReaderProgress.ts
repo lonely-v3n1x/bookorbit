@@ -39,6 +39,28 @@ function normalizePageNumber(value: unknown): number | null {
   return parsed === null || parsed < 0 ? null : parsed
 }
 
+// Local mirror of the last saved progress, so reopening a book while offline
+// restores the position instead of starting from the beginning.
+const PROGRESS_MIRROR_PREFIX = 'bookorbit:offline-progress:'
+const progressMirrorKey = (fileId: number) => `${PROGRESS_MIRROR_PREFIX}${fileId}`
+
+function readProgressMirror(fileId: number): Record<string, unknown> | null {
+  try {
+    const raw = localStorage.getItem(progressMirrorKey(fileId))
+    return raw ? (JSON.parse(raw) as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}
+
+function writeProgressMirror(fileId: number, payload: Record<string, unknown>): void {
+  try {
+    localStorage.setItem(progressMirrorKey(fileId), JSON.stringify(payload))
+  } catch {
+    // best-effort
+  }
+}
+
 export function formatTimeRemaining(minutes: number): string {
   if (!Number.isFinite(minutes) || minutes < 0) return ''
   if (minutes < 1) return '< 1 min'
@@ -95,9 +117,15 @@ export function useReaderProgress(
 
   async function load() {
     if (!unref(trackingEnabled)) return
-    const res = await api(`/api/v1/books/files/${fileId}/progress`)
-    if (!res.ok) return
-    const data = await res.json()
+    let data: Record<string, unknown> | null = null
+    try {
+      const res = await api(`/api/v1/books/files/${fileId}/progress`)
+      if (res.ok) data = (await res.json()) as Record<string, unknown>
+    } catch {
+      // Network failure - fall back to the local mirror below.
+    }
+    if (!data) data = readProgressMirror(fileId)
+    if (!data) return
     cfi.value = normalizeString(data.cfi)
     pageNumber.value = normalizePageNumber(data.pageNumber)
     updatePercentage(data.percentage, 0)
@@ -141,20 +169,26 @@ export function useReaderProgress(
   async function save() {
     if (!unref(trackingEnabled)) return
     const safePercentage = updatePercentage(percentage.value)
-    await api(`/api/v1/books/files/${fileId}/progress`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        cfi: cfi.value,
-        pageNumber: normalizePageNumber(pageNumber.value),
-        percentage: safePercentage,
-        koboLocationSource: koboLocationSource.value,
-        koboLocationType: koboLocationType.value,
-        koboLocationValue: koboLocationValue.value,
-        koboContentSourceProgressPercent: normalizeNullablePercentage(koboContentSourceProgressPercent.value),
-        koreaderProgress: koreaderProgress.value,
-      }),
-    })
+    const payload = {
+      cfi: cfi.value,
+      pageNumber: normalizePageNumber(pageNumber.value),
+      percentage: safePercentage,
+      koboLocationSource: koboLocationSource.value,
+      koboLocationType: koboLocationType.value,
+      koboLocationValue: koboLocationValue.value,
+      koboContentSourceProgressPercent: normalizeNullablePercentage(koboContentSourceProgressPercent.value),
+      koreaderProgress: koreaderProgress.value,
+    }
+    writeProgressMirror(fileId, payload)
+    try {
+      await api(`/api/v1/books/files/${fileId}/progress`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+    } catch {
+      // Offline: the request is queued by the API layer, or the session is gone.
+    }
   }
 
   function cycleFooterMode() {

@@ -1,4 +1,6 @@
 import type { Router } from 'vue-router'
+import { getStoredAccessToken } from '@/lib/api'
+import { offlineBooted } from '@/lib/offline/state'
 import { useAuth } from '@/features/auth/composables/useAuth'
 import { useChangePasswordDialog } from '@/composables/useChangePasswordDialog'
 import { useSetupStatus } from '@/features/auth/composables/useSetupStatus'
@@ -26,6 +28,11 @@ export function registerAuthGuard(router: Router): void {
     const { user } = useAuth()
 
     if (!user.value) {
+      // Offline boot with a stored session: land on the downloaded shelf instead of the login page.
+      if (offlineBooted.value && getStoredAccessToken()) {
+        if (to.name !== 'offline') return { name: 'offline' }
+        return true
+      }
       return { path: '/login', query: { redirect: to.fullPath } }
     }
 

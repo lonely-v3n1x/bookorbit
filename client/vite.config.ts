@@ -84,13 +84,15 @@ export default defineConfig({
             icons: [{ src: 'pwa-192x192.png', sizes: '192x192' }],
           },
         ],
-      },
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
-        globIgnores: ['**/assets/foliate/**'],
-        navigateFallback: 'index.html',
-        navigateFallbackDenylist: [/^\/api\//],
-        runtimeCaching: [
+      },workbox: {
+globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,wasm,mjs}'],
+// The EPUB reader engine and pdfium.wasm must be precached for offline reading.
+globIgnores: [],
+maximumFileSizeToCacheInBytes: 40 * 1024 * 1024,
+cleanupOutdatedCaches: true,
+navigateFallback: 'index.html',
+navigateFallbackDenylist: [/^\/api\//],
+runtimeCaching: [
           {
             urlPattern: /^.*\/api\/v1\/books\/\d+\/cover(\?.*)?$/,
             handler: 'CacheFirst',
@@ -104,22 +106,54 @@ export default defineConfig({
                 statuses: [0, 200],
               },
             },
-          },
-          {
-            urlPattern: /^.*\/api\/v1\/books\/\d+\/thumbnail(\?.*)?$/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'book-thumbnails',
-              expiration: {
-                maxEntries: 200,
-                maxAgeSeconds: 60 * 60 * 24 * 30,
-              },
-              cacheableResponse: {
-                statuses: [0, 200],
-              },
-            },
-          },
-        ],
+          },{
+urlPattern: /^.*\/api\/v1\/books\/\d+\/thumbnail(\?.*)?$/,
+handler: 'CacheFirst',
+options: {
+cacheName: 'book-thumbnails',
+expiration: {
+maxEntries: 200,
+maxAgeSeconds: 60 * 60 * 24 * 30,
+},
+cacheableResponse: {
+statuses: [0, 200],
+},
+},
+},
+// Offline reading: EPUB streaming resources, EPUB info, and whole-file serves.
+// StaleWhileRevalidate caches as you read and serves cached content when offline;
+// the page also seeds this cache directly when a book is saved for offline reading.
+{
+urlPattern: /\/api\/v1\/epub\/\d+\/info(\?.*)?$/,
+handler: 'StaleWhileRevalidate',
+options: {
+cacheName: 'bookorbit-offline-v1',
+cacheableResponse: {
+statuses: [0, 200],
+},
+},
+},
+{
+urlPattern: /\/api\/v1\/epub\/\d+\/file\/.*/,
+handler: 'StaleWhileRevalidate',
+options: {
+cacheName: 'bookorbit-offline-v1',
+cacheableResponse: {
+statuses: [0, 200],
+},
+},
+},
+{
+urlPattern: /\/api\/v1\/books\/files\/\d+\/serve(\?.*)?$/,
+handler: 'StaleWhileRevalidate',
+options: {
+cacheName: 'bookorbit-offline-v1',
+cacheableResponse: {
+statuses: [0, 200],
+},
+},
+},
+],
       },
       devOptions: {
         enabled: false,

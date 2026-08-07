@@ -1,7 +1,8 @@
 import { computed, type Component } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, type RouteLocationNormalizedLoaded, type RouteLocationRaw } from 'vue-router'
-import { Highlighter, LayoutDashboard, Library, PackageOpen, Users, Wrench } from '@lucide/vue'
+import { Download, Highlighter, LayoutDashboard, Library, PackageOpen, Users, Wrench } from '@lucide/vue'
+import { downloadedCount } from '@/lib/offline/state'
 import type { BrowseCounts } from '@bookorbit/types'
 import { usePermissions } from '@/features/auth/composables/usePermissions'
 import { useBookDockSummary } from '@/features/book-dock/composables/useBookDockSummary'
@@ -71,6 +72,15 @@ export const SIDEBAR_NAV_REGISTRY: readonly SidebarNavEntry[] = [
     zone: 'primary',
     to: { name: 'dashboard' },
     isActive: (route) => route.name === 'dashboard',
+  },
+  {
+    id: 'offline',
+    labelKey: 'components.sidebar.offline',
+    icon: Download,
+    zone: 'primary',
+    to: { name: 'offline' },
+    isActive: (route) => route.name === 'offline',
+    badge: () => (downloadedCount.value > 0 ? downloadedCount.value : null),
   },
   {
     id: 'book-dock',
@@ -154,15 +164,17 @@ export function useSidebarNav() {
     browseCounts: browseCounts.value,
   }))
 
-  const zones = computed<SidebarNavZone[]>(() =>
-    SIDEBAR_ZONE_IDS.map((zoneId) => ({
+  const zones = computed<SidebarNavZone[]>(() => {
+    // Reading the ref here makes the computed re-run when downloads change, keeping the badge fresh.
+    void downloadedCount.value
+    return SIDEBAR_ZONE_IDS.map((zoneId) => ({
       id: zoneId,
       labelKey: ZONE_LABEL_KEYS[zoneId],
       entries: SIDEBAR_NAV_REGISTRY.filter((entry) => entry.zone === zoneId && isNavEntryAllowed(entry, context.value)).map((entry) =>
         resolveNavEntry(entry, context.value, route, t(entry.labelKey)),
       ),
-    })).filter((zone) => zone.entries.length > 0),
-  )
+    })).filter((zone) => zone.entries.length > 0)
+  })
 
   return { zones }
 }

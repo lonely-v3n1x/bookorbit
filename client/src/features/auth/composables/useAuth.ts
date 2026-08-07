@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import type { AuthUser, AuthResponse } from '@bookorbit/types'
-import { api, refreshAccessToken, setAccessToken, setOnAuthFailure } from '@/lib/api'
+import { api, getStoredAccessToken, refreshAccessToken, setAccessToken, setOnAuthFailure } from '@/lib/api'
+import { offlineBooted } from '@/lib/offline/state'
 import router from '@/router'
 import { cancelPendingDisplaySettingsSync, initDisplaySettingsSync, loadDisplaySettingsFromServer } from '@/composables/useDisplaySettingsSync'
 import { cancelPendingThemeSync, initThemeSync, loadFromServer } from '@/composables/useThemeSync'
@@ -60,6 +61,7 @@ function clearAuth() {
   resetCollections()
   resetBrowseCounts()
   user.value = null
+  offlineBooted.value = false
   setAccessToken(null)
   disconnectAuthorEnrichmentSocket()
   disconnectBookMetadataFetchSocket()
@@ -102,8 +104,24 @@ export function useAuth() {
       await me()
       await hydratePreferences()
       startSessionRefresh()
+      offlineBooted.value = false
     } catch {
-      // no valid session
+      const stored = getStoredAccessToken()
+      if (stored) {
+        setAccessToken(stored)
+        try {
+          await me()
+          await hydratePreferences()
+          startSessionRefresh()
+          offlineBooted.value = false
+        } catch {
+          // Server unreachable: boot in offline mode so the downloaded shelf stays usable.
+          offlineBooted.value = true
+        }
+      } else {
+        // no valid session
+        offlineBooted.value = false
+      }
     } finally {
       initThemeSync()
       initDisplaySettingsSync()

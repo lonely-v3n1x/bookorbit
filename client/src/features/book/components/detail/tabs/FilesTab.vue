@@ -1,19 +1,39 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { onMounted, reactive, ref, watch, computed } from 'vue'
 import { useLocalStorage } from '@vueuse/core'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { toast } from 'vue-sonner'
 import { formatDate as formatLocaleDate } from '@/i18n/formatters'
 import { formatBytes } from '@/lib/formatting'
-import { BookOpen, Download, Eye, FilePlus, Files, Headphones, History, FolderOpen, ArrowUpDown, MoreVertical, Pencil, Trash2 } from '@lucide/vue'
+import {
+  BookOpen,
+  Check,
+  Download,
+  Eye,
+  FilePlus,
+  Files,
+  HardDriveDownload,
+  Headphones,
+  History,
+  FolderOpen,
+  ArrowUpDown,
+  LoaderCircle,
+  MoreVertical,
+  Pencil,
+  Trash2,
+} from '@lucide/vue'
 import type { BookDetail, BookDetailFile, WriteLogEntry } from '@bookorbit/types'
 import { Permission, READER_OPENABLE_FORMATS } from '@bookorbit/types'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { api } from '@/lib/api'
 import { useBookDownload } from '@/features/book/composables/useBookDownload'
+import { useCoverVersions } from '@/features/book/composables/useCoverVersions'
 import { getFormatColor } from '@/features/book/lib/format-colors'
 import { usePermissions } from '@/features/auth/composables/usePermissions'
+import { downloadOfflineBook, isBookOffline, removeOfflineBook } from '@/lib/offline/books'
+import { isOfflineSupported } from '@/lib/offline/state'
 import AddBookFileModal from './AddBookFileModal.vue'
 
 const props = defineProps<{ book: BookDetail }>()
@@ -23,6 +43,70 @@ const router = useRouter()
 
 const { downloadFile: downloadBookFile } = useBookDownload()
 const { hasPermission } = usePermissions()
+const { coverUrl } = useCoverVersions()
+
+const offlineSupported = isOfflineSupported()
+const offlineStatus = reactive<Record<number, boolean>>({})
+const downloadingFileId = ref<number | null>(null)
+const downloadProgress = ref<number | null>(null)
+
+function isOfflineFormat(file: BookDetailFile): boolean {
+  const format = file.format?.toLowerCase()
+  return format === 'epub' || format === 'pdf'
+}
+
+async function refreshOfflineStatuses() {
+  const entries = await Promise.all(props.book.files.map(async (file) => [file.id, await isBookOffline(props.book.id, file.id)] as const))
+  for (const [fileId, offline] of entries) offlineStatus[fileId] = offline
+}
+
+function offlineButtonLabel(file: BookDetailFile): string {
+  if (downloadingFileId.value === file.id) {
+    const pct = Math.round((downloadProgress.value ?? 0) * 100)
+    return pct > 0 && pct < 100 ? `${pct}%` : t('offline.file.downloading')
+  }
+  return offlineStatus[file.id] ? t('offline.file.saved') : t('offline.file.save')
+}
+
+async function toggleOffline(file: BookDetailFile) {
+  if (downloadingFileId.value !== null || !isOfflineFormat(file)) return
+
+  if (offlineStatus[file.id]) {
+    await removeOfflineBook(props.book.id, file.id)
+    offlineStatus[file.id] = false
+    toast.success(t('offline.file.removed'))
+    return
+  }
+
+  downloadingFileId.value = file.id
+  downloadProgress.value = 0
+  try {
+    await downloadOfflineBook(
+      {
+        bookId: props.book.id,
+        fileId: file.id,
+        format: file.format?.toLowerCase() ?? 'epub',
+        title: props.book.title ?? '',
+        coverUrl: coverUrl(props.book.id, 'thumbnail', props.book.updatedAt ?? props.book.addedAt),
+        sizeBytes: file.sizeBytes ?? null,
+      },
+      (fraction) => {
+        downloadProgress.value = fraction
+      },
+    )
+    offlineStatus[file.id] = true
+    toast.success(t('offline.file.savedToast'))
+  } catch {
+    toast.error(t('offline.file.failed'))
+  } finally {
+    downloadingFileId.value = null
+    downloadProgress.value = null
+  }
+}
+
+onMounted(() => {
+  void refreshOfflineStatuses()
+})
 
 const AUDIO_FORMATS = new Set(['m4b', 'm4a', 'mp3', 'opus', 'ogg', 'flac'])
 
@@ -238,6 +322,7 @@ watch(
   () => {
     writeLogOpen.value = false
     writeLog.value = []
+    void refreshOfflineStatuses()
   },
 )
 
@@ -425,6 +510,19 @@ async function toggleWriteLog() {
               <Headphones class="size-3.5" />
               {{ t('book.detail.files.play') }}
             </button>
+            <button
+              v-if="offlineSupported && isOfflineFormat(file)"
+              class="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2.5 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-60"
+              :class="offlineStatus[file.id] ? 'text-primary hover:bg-muted' : 'text-foreground hover:bg-muted'"
+              :disabled="downloadingFileId !== null"
+              :title="offlineStatus[file.id] ? t('offline.file.remove') : t('offline.file.save')"
+              @click="toggleOffline(file)"
+            >
+              <LoaderCircle v-if="downloadingFileId === file.id" class="size-3.5 animate-spin" />
+              <Check v-else-if="offlineStatus[file.id]" class="size-3.5" />
+              <HardDriveDownload v-else class="size-3.5" />
+              {{ offlineButtonLabel(file) }}
+            </button>
             <Tooltip v-if="hasPermission('library_download')">
               <TooltipTrigger as-child>
                 <button
@@ -455,6 +553,11 @@ async function toggleWriteLog() {
               <DropdownMenuItem v-if="isAudioFile(file)" class="md:hidden" @click="openFile(file)">
                 <Headphones class="mr-2 size-4" />
                 {{ t('book.detail.files.play') }}
+              </DropdownMenuItem>
+              <DropdownMenuItem v-if="offlineSupported && isOfflineFormat(file)" @click="toggleOffline(file)">
+                <Check v-if="offlineStatus[file.id]" class="mr-2 size-4" />
+                <HardDriveDownload v-else class="mr-2 size-4" />
+                {{ offlineButtonLabel(file) }}
               </DropdownMenuItem>
               <DropdownMenuItem v-if="READER_OPENABLE_FORMATS.has(file.format ?? '')" @click="openFile(file, 'peek')">
                 <Eye class="mr-2 size-4" />

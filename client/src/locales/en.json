@@ -4557,6 +4557,7 @@
     },
     "sidebar": {
       "dashboard": "Dashboard",
+      "offline": "Downloaded",
       "authors": "Authors",
       "series": "Series",
       "tools": "Tools",
@@ -6961,6 +6962,29 @@
     "previousImage": "Previous image",
     "nextImage": "Next image"
   },
+  "offline": {
+    "title": "Downloaded",
+    "subtitle": "Books saved for reading without a connection",
+    "storedSummary": "{count} books - {size}",
+    "unsupported": "Offline reading is not supported in this browser. Use a recent version of Chrome, Edge, Safari, or Firefox.",
+    "offlineMode": "You are offline. Only downloaded books are available.",
+    "offlineBootHint": "Your session was restored from this device. Progress and highlights will sync when you are back online.",
+    "pendingSync": "{count} change(s) waiting to sync",
+    "pendingSyncHint": "Reading progress, highlights, and bookmarks made offline will be pushed to the server.",
+    "syncNow": "Sync now",
+    "emptyTitle": "No downloaded books",
+    "emptyDescription": "Open a book in your library and choose Save for offline to read it without a connection.",
+    "open": "Read",
+    "file": {
+      "remove": "Remove download",
+      "save": "Save for offline",
+      "saved": "Offline",
+      "downloading": "Saving...",
+      "removed": "Removed from offline storage.",
+      "savedToast": "Saved for offline reading.",
+      "failed": "Could not download this book."
+    }
+  },
   "titles": {
     "dashboard": "Dashboard",
     "libraries": "Libraries",
@@ -6984,6 +7008,7 @@
     "resetPassword": "Reset Password",
     "completingSignIn": "Completing Sign In",
     "magicLinkLogin": "Magic Link Login",
+    "offline": "Downloaded",
     "readPrefix": "Read",
     "emailSuffix": "Email",
     "library": "Library",

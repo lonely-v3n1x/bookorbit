@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import type { AnnotationItem } from '@bookorbit/types'
 import { api } from '@/lib/api'
+import { isQueuedResponse, makeTempId, type ReconciledMutation } from '@/lib/offline/queue'
 
 export type Annotation = AnnotationItem
 
@@ -10,9 +11,30 @@ export interface AnnotationPatch {
   style?: string
 }
 
+type ReconcileHandler = (mutations: ReconciledMutation[]) => void
+let activeReconcileHandler: ReconcileHandler | null = null
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('bookorbit:offline-reconciled', ((event: Event) => {
+    const detail = (event as CustomEvent<{ mutations: ReconciledMutation[] }>).detail
+    activeReconcileHandler?.(detail?.mutations ?? [])
+  }) as EventListener)
+}
+
 export function useAnnotations() {
   const annotations = ref<Annotation[]>([])
   const loadError = ref<string | null>(null)
+
+  // Replace locally-created (pending) annotations with the real server rows after sync.
+  activeReconcileHandler = (mutations) => {
+    for (const mutation of mutations) {
+      if (!mutation.url.includes('/annotations')) continue
+      const real = mutation.data as Annotation | null
+      if (!real || typeof real.id !== 'number') continue
+      if (!annotations.value.some((a) => a.id === mutation.tempId)) continue
+      annotations.value = annotations.value.map((a) => (a.id === mutation.tempId ? real : a))
+    }
+  }
 
   async function load(bookId: number) {
     loadError.value = null
@@ -33,6 +55,27 @@ export function useAnnotations() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     })
+    if (isQueuedResponse(res)) {
+      // Offline: keep a local pending annotation; the outbox creates it on the server later.
+      const pending: Annotation = {
+        id: makeTempId(),
+        bookId,
+        cfi: data.cfi,
+        jumpFileId: null,
+        pageno: null,
+        text: data.text,
+        color: data.color,
+        style: data.style,
+        note: data.note ?? null,
+        chapterTitle: data.chapterTitle ?? null,
+        origin: 'web',
+        positionStatus: 'pending',
+        chapterIndex: null,
+        createdAt: new Date().toISOString(),
+      }
+      annotations.value = [...annotations.value, pending]
+      return pending
+    }
     if (!res.ok) return null
     const created: Annotation = await res.json()
     annotations.value = [...annotations.value, created]
@@ -45,6 +88,11 @@ export function useAnnotations() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data),
     })
+    if (isQueuedResponse(res)) {
+      // Offline: apply the patch locally; the outbox replays it against the server later.
+      annotations.value = annotations.value.map((a) => (a.id === id ? { ...a, ...data } : a))
+      return annotations.value.find((a) => a.id === id) ?? null
+    }
     if (!res.ok) return null
 
     const updated: Annotation = await res.json()
