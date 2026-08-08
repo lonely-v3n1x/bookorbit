@@ -9,6 +9,10 @@
 #
 # IMPORTANT: your APP_URL in .env must be https://books.yourdomain.com so the
 # app (and the iOS service worker / PWA offline mode) runs over HTTPS.
+#
+# NOTE: the base compose still publishes the app on host port 3000 (plain HTTP).
+# For a strictly HTTPS-only install, block inbound :3000 in your firewall — the
+# Caddy service above is the only public entry point on :80/:443.
 
 services:
   caddy:
@@ -22,13 +26,17 @@ services:
       - "443:443/udp"
     environment:
       APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN in .env to your domain, e.g. books.example.com}
+      ACME_EMAIL: ${ACME_EMAIL:-caddy@${APP_DOMAIN}}
     volumes:
       - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - ./data/caddy:/data
       - ./data/caddy-config:/config
     depends_on:
-      - app
+      app:
+        condition: service_healthy
     healthcheck:
+      # Probe Caddy's local admin API instead of the site, which would
+      # 308-redirect to HTTPS and make the check depend on cert issuance.
       test:
         [
           "CMD",
@@ -36,7 +44,7 @@ services:
           "--no-verbose",
           "--tries=1",
           "--spider",
-          "http://localhost/",
+          "http://127.0.0.1:2019/config/",
         ]
       interval: 30s
       timeout: 5s

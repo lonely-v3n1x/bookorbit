@@ -4,8 +4,15 @@
 # so this file needs no editing. Caddy automatically obtains and renews a
 # Let's Encrypt certificate for the domain and serves the app on :443.
 #
+# ACME_EMAIL is also injected (defaults to caddy@<domain> in compose) so
+# Let's Encrypt can send certificate expiry notices to a real mailbox.
+#
 # Note: `encode` is intentionally first so gzip/zstd are negotiated before
 # the proxy, and SSE/WebSocket upgrade headers pass straight through.
+
+{
+	email {$ACME_EMAIL}
+}
 
 {$APP_DOMAIN} {
 	encode zstd gzip
