@@ -95,7 +95,10 @@ function moveBook(index: number, direction: -1 | 1) {
   const target = index + direction
   if (target < 0 || target >= books.value.length) return
   const list = [...books.value]
-  ;[list[index], list[target]] = [list[target], list[index]]
+  // Extract the moved book (index is valid here, so item is always defined).
+  const [item] = list.splice(index, 1)
+  if (!item) return
+  list.splice(target, 0, item)
   books.value = list
   void save()
 }
