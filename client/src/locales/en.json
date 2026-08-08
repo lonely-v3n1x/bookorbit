@@ -6819,6 +6819,9 @@
     "bookDetail": {
       "title": "Book",
       "titleWithId": "Book #{id}",
+      "loadErrorTitle": "Couldn't load this book",
+      "loadErrorDescription": "Something went wrong while fetching the book details. Check your connection and try again.",
+      "loadErrorRetry": "Retry",
       "pageTitle": {
         "book": "Book · {base}",
         "editMetadata": "Edit Metadata · {base}",

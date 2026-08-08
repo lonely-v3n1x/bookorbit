@@ -19,6 +19,7 @@ import { useCoverVersions } from '@/features/book/composables/useCoverVersions'
 import { useCoverTint } from '@/features/book/composables/useCoverTint'
 import { useDisplaySettings } from '@/composables/useDisplaySettings'
 import EntityNotFound from '@/components/EntityNotFound.vue'
+import { RefreshCw } from '@lucide/vue'
 
 const ReadingLogTab = defineAsyncComponent(() => import('@/features/book/components/detail/tabs/ReadingLogTab.vue'))
 const HighlightsTab = defineAsyncComponent(() => import('@/features/book/components/detail/tabs/HighlightsTab.vue'))
@@ -40,7 +41,7 @@ provide(
 const bookId = computed(() => Number(route.params.bookId))
 const tab = computed(() => normalizeBookDetailTab(route.query.tab))
 
-const { detail, loading, notFound, fetch } = useBookDetail()
+const { detail, loading, notFound, error, fetch } = useBookDetail()
 const pageTitle = computed(() => {
   const title = detail.value?.title?.trim()
   const base = title || (Number.isFinite(bookId.value) ? t('views.bookDetail.titleWithId', { id: bookId.value }) : t('views.bookDetail.title'))
@@ -188,6 +189,18 @@ function onCoverChanged(source: 'extracted' | 'custom' | null) {
 
       <div v-else-if="notFound" key="not-found">
         <EntityNotFound :entity="t('views.entity.book')" />
+      </div>
+
+      <div v-else-if="error" key="error" class="flex flex-col items-center justify-center px-4 py-20 text-center">
+        <p class="text-sm font-semibold text-foreground">{{ t('views.bookDetail.loadErrorTitle') }}</p>
+        <p class="mt-1 text-sm text-muted-foreground">{{ t('views.bookDetail.loadErrorDescription') }}</p>
+        <button
+          class="mt-5 inline-flex h-9 items-center gap-1.5 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          @click="fetch(bookId)"
+        >
+          <RefreshCw class="size-4" />
+          {{ t('views.bookDetail.loadErrorRetry') }}
+        </button>
       </div>
     </Transition>
   </BookDetailLayout>

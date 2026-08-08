@@ -12,6 +12,7 @@ import {
   Eye,
   FolderInput,
   FolderPlus,
+  HardDriveDownload,
   Image,
   Lock,
   LockOpen,
@@ -46,6 +47,9 @@ import { usePermissions } from '@/features/auth/composables/usePermissions'
 import { useDisplaySettings, type GridCardLabelField } from '@/composables/useDisplaySettings'
 import { COVER_ASPECT_RATIO_KEY, DEFAULT_COVER_ASPECT_RATIO, coverAspectRatioValue, fittedCoverFrameStyle } from '../lib/cover-aspect-ratio'
 import { useBookDownload } from '@/features/book/composables/useBookDownload'
+import { downloadOfflineBook, isBookOffline, removeOfflineBook } from '@/lib/offline/books'
+import { isOfflineSupported } from '@/lib/offline/state'
+import { toast } from 'vue-sonner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import SendBookDialog from '@/features/email/components/SendBookDialog.vue'
 import BookCoverArtwork from './BookCoverArtwork.vue'
@@ -343,6 +347,73 @@ const showBelowCoverLabelArea = computed(() => props.showLabel && cardInfoMode.v
 
 const { downloadFile, exportBooks } = useBookDownload()
 
+const offlineSupported = isOfflineSupported()
+const offlineStatus = ref(false)
+const offlineBusy = ref(false)
+const offlineProgress = ref(0)
+
+/** The primary file when it can be saved for offline reading (EPUB/PDF). */
+const primaryOfflineFile = computed(() => {
+  const file = primaryFile.value
+  if (!file?.format) return null
+  const fmt = file.format.toLowerCase()
+  return fmt === 'epub' || fmt === 'pdf' ? file : null
+})
+
+watch(
+  () => [props.book.id, primaryOfflineFile.value?.id],
+  async () => {
+    const file = primaryOfflineFile.value
+    offlineStatus.value = file ? await isBookOffline(props.book.id, file.id) : false
+  },
+  { immediate: true },
+)
+
+function offlineButtonLabel(): string {
+  if (offlineBusy.value) {
+    const pct = Math.round((offlineProgress.value ?? 0) * 100)
+    return pct > 0 && pct < 100 ? `${pct}%` : t('offline.file.downloading')
+  }
+  return offlineStatus.value ? t('offline.file.saved') : t('offline.file.save')
+}
+
+async function toggleOffline() {
+  const file = primaryOfflineFile.value
+  if (!file || offlineBusy.value || isMissing.value) return
+
+  if (offlineStatus.value) {
+    await removeOfflineBook(props.book.id, file.id)
+    offlineStatus.value = false
+    toast.success(t('offline.file.removed'))
+    return
+  }
+
+  offlineBusy.value = true
+  offlineProgress.value = 0
+  try {
+    await downloadOfflineBook(
+      {
+        bookId: props.book.id,
+        fileId: file.id,
+        format: file.format!.toLowerCase(),
+        title: props.book.title ?? '',
+        coverUrl: coverSrc.value,
+        sizeBytes: file.sizeBytes ?? null,
+      },
+      (fraction) => {
+        offlineProgress.value = fraction
+      },
+    )
+    offlineStatus.value = true
+    toast.success(t('offline.file.savedToast'))
+  } catch {
+    toast.error(t('offline.file.failed'))
+  } finally {
+    offlineBusy.value = false
+    offlineProgress.value = 0
+  }
+}
+
 function isAudioFile(file: BookFileRef) {
   return !!file.format && FORMAT_TO_GROUP[file.format] === 'audio'
 }
@@ -548,6 +619,17 @@ const secondaryLabelText = computed(() => resolveBookLabel(gridCardSecondaryLabe
                 <PanelRight class="size-[12cqi]" />
               </button>
               <button
+                v-if="offlineSupported && primaryOfflineFile"
+                class="p-[3cqi] rounded-[2.5cqi] bg-black/50 hover:bg-black/30 transition-colors text-white"
+                :title="offlineStatus ? t('offline.file.remove') : t('offline.file.save')"
+                :aria-label="offlineStatus ? t('offline.file.remove') : t('offline.file.save')"
+                @click="toggleOffline"
+              >
+                <Loader2 v-if="offlineBusy" class="size-[12cqi] animate-spin" />
+                <Check v-else-if="offlineStatus" class="size-[12cqi]" />
+                <HardDriveDownload v-else class="size-[12cqi]" />
+              </button>
+              <button
                 v-if="showExplicitReadButton"
                 class="p-[3cqi] rounded-[2.5cqi] bg-black/50 hover:bg-black/30 transition-colors text-white"
                 @click.stop="openPrimaryFileExplicit"
@@ -643,6 +725,13 @@ const secondaryLabelText = computed(() => resolveBookLabel(gridCardSecondaryLabe
                       <DropdownMenuItem @click="handleExportAll"> {{ t('book.download.allFormatsZip') }} </DropdownMenuItem>
                     </DropdownMenuSubContent>
                   </DropdownMenuSub>
+
+                  <DropdownMenuItem v-if="offlineSupported && primaryOfflineFile" @click="toggleOffline">
+                    <Loader2 v-if="offlineBusy" class="size-4 mr-2 animate-spin" />
+                    <Check v-else-if="offlineStatus" class="size-4 mr-2" />
+                    <HardDriveDownload v-else class="size-4 mr-2" />
+                    {{ offlineButtonLabel() }}
+                  </DropdownMenuItem>
 
                   <DropdownMenuItem @click="openBookDetails">
                     <BookText class="size-4 mr-2" />

@@ -1,7 +1,24 @@
 <script setup lang="ts">
 import { computed, inject, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { BookOpen, ExternalLink, Eye, Folder, FolderPlus, Headphones, Pencil, Star, Trash2, X } from '@lucide/vue'
+import {
+  BookOpen,
+  Check,
+  ExternalLink,
+  Eye,
+  Folder,
+  FolderPlus,
+  HardDriveDownload,
+  Headphones,
+  LoaderCircle,
+  Pencil,
+  Star,
+  Trash2,
+  X,
+} from '@lucide/vue'
+import { downloadOfflineBook, isBookOffline, removeOfflineBook } from '@/lib/offline/books'
+import { isOfflineSupported } from '@/lib/offline/state'
+import { toast } from 'vue-sonner'
 import { usePermissions } from '@/features/auth/composables/usePermissions'
 import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -198,6 +215,73 @@ const quickViewCoverAspectRatio = computed(() => {
 })
 
 const primaryFile = computed(() => detail.value?.files.find((f) => f.role === 'primary') ?? detail.value?.files[0] ?? null)
+
+const offlineSupported = isOfflineSupported()
+const offlineStatus = ref(false)
+const offlineBusy = ref(false)
+const offlineProgress = ref(0)
+
+/** The primary file when it can be saved for offline reading (EPUB/PDF). */
+const primaryOfflineFile = computed(() => {
+  const file = primaryFile.value
+  if (!file?.format) return null
+  const fmt = file.format.toLowerCase()
+  return fmt === 'epub' || fmt === 'pdf' ? file : null
+})
+
+watch(
+  () => [detail.value?.id, primaryOfflineFile.value?.id],
+  async () => {
+    const file = primaryOfflineFile.value
+    offlineStatus.value = detail.value && file ? await isBookOffline(detail.value.id, file.id) : false
+  },
+  { immediate: true },
+)
+
+function offlineButtonLabel(): string {
+  if (offlineBusy.value) {
+    const pct = Math.round((offlineProgress.value ?? 0) * 100)
+    return pct > 0 && pct < 100 ? `${pct}%` : t('offline.file.downloading')
+  }
+  return offlineStatus.value ? t('offline.file.saved') : t('offline.file.save')
+}
+
+async function toggleOffline() {
+  const file = primaryOfflineFile.value
+  if (!file || offlineBusy.value || !detail.value || detail.value.status === 'missing') return
+
+  if (offlineStatus.value) {
+    await removeOfflineBook(detail.value.id, file.id)
+    offlineStatus.value = false
+    toast.success(t('offline.file.removed'))
+    return
+  }
+
+  offlineBusy.value = true
+  offlineProgress.value = 0
+  try {
+    await downloadOfflineBook(
+      {
+        bookId: detail.value.id,
+        fileId: file.id,
+        format: file.format!.toLowerCase(),
+        title: detail.value.title ?? '',
+        coverUrl: coverSrc.value,
+        sizeBytes: file.sizeBytes ?? null,
+      },
+      (fraction) => {
+        offlineProgress.value = fraction
+      },
+    )
+    offlineStatus.value = true
+    toast.success(t('offline.file.savedToast'))
+  } catch {
+    toast.error(t('offline.file.failed'))
+  } finally {
+    offlineBusy.value = false
+    offlineProgress.value = 0
+  }
+}
 const isPrimaryAudio = computed(() => primaryFile.value?.format != null && FORMAT_TO_GROUP[primaryFile.value.format] === 'audio')
 const isPrimaryComic = computed(() => primaryFile.value?.format != null && FORMAT_TO_GROUP[primaryFile.value.format] === 'cbx')
 const knownFormats = computed(() => [
@@ -511,6 +595,18 @@ function handleDelete() {
               <Headphones v-if="isPrimaryAudio" class="size-4" />
               <BookOpen v-else class="size-4" />
               <span class="hidden sm:inline">{{ isPrimaryAudio ? t('book.actions.listen') : t('book.actions.read') }}</span>
+            </button>
+            <button
+              v-if="offlineSupported && primaryOfflineFile"
+              class="flex flex-1 items-center justify-center gap-2 h-9 rounded-md border border-input bg-background text-sm font-medium hover:bg-muted transition-colors disabled:opacity-50"
+              :disabled="offlineBusy || !primaryFile"
+              :title="offlineStatus ? t('offline.file.remove') : t('offline.file.save')"
+              @click="toggleOffline"
+            >
+              <LoaderCircle v-if="offlineBusy" class="size-4 animate-spin" />
+              <Check v-else-if="offlineStatus" class="size-4" />
+              <HardDriveDownload v-else class="size-4" />
+              <span class="hidden sm:inline">{{ offlineButtonLabel() }}</span>
             </button>
             <button
               class="flex flex-1 items-center justify-center text-primary-foreground gap-2 h-9 rounded-md bg-sky-600 text-sm font-medium hover:bg-sky-700 dark:bg-sky-500 dark:hover:bg-sky-600 transition-colors"
