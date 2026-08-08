@@ -15,7 +15,7 @@ set -euo pipefail
 # --- Configuration (override via environment) ---------------------------------
 BOOKORBIT_DIR="${BOOKORBIT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 BACKUP_DIR="${BACKUP_DIR:-$BOOKORBIT_DIR/backups}"
-RCLONE_REMOTE="${RCLONE_REMOTE:-gdrive}"
+RCLONE_REMOTE="${RCLONE_REMOTE:-r2}"   # rclone remote name (e.g. r2, gdrive, b2)
 RCLONE_PATH="${RCLONE_PATH:-bookorbit-backups}"
 DB_CONTAINER="${DB_CONTAINER:-bookorbit-db}"
 KEEP_DAILY="${KEEP_DAILY:-14}"     # Postgres dumps kept (days)

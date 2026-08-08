@@ -1,18 +1,23 @@
-# BookOrbit → Google Drive automatic backup
+# BookOrbit automatic backup (Cloudflare R2)
 
-Daily, free backups of your BookOrbit server to your personal Google Drive.
+Daily, free backups of your BookOrbit server to **Cloudflare R2** object
+storage. R2 gives you 10 GB free with **zero egress fees** (restoring never
+costs anything) and the setup is just two API keys — no OAuth app creation,
+no consent screens.
 
 | What                                    | Frequency    | Contents                                                                  | Kept |
 | --------------------------------------- | ------------ | ------------------------------------------------------------------------- | ---- |
 | `daily/bookorbit-YYYYMMDD.sql.gz`       | every day    | Postgres dump (metadata, progress, ratings, users, public shelf) + `.env` | 14   |
 | `weekly/bookorbit-YYYYMMDD-full.tar.gz` | every Sunday | your books + app data (covers, etc.)                                      | 8    |
 
-Retention is enforced both **locally and on Google Drive**, so the free
-15 GB stays comfortable for a personal library.
+Retention is enforced both **locally and on R2**, so the free 10 GB stays
+comfortable for a personal library.
 
 > Why weekly for books? Book files barely change after import — uploading
-> the full library every day would just burn Drive quota and bandwidth.
+> the full library every day would just burn quota and bandwidth.
 > The database (which _does_ change daily) is backed up every day.
+
+> 📚 Google Drive / Backblaze B2 work too — see [Other destinations](#other-destinations).
 
 ---
 
@@ -25,46 +30,35 @@ sudo apt update && sudo apt install -y rclone
 rclone version
 ```
 
-### 2. Create your own Google OAuth client (required since 2026)
+### 2. Create your R2 bucket + API token (~5 minutes, no credit card)
 
-> ⚠️ **Important:** Google retired rclone's shared default client ID.
-> Without your own OAuth client, `rclone` will fail with
-> "Access blocked / authorization error". This step is free and takes ~5 min.
+1. Create a free Cloudflare account: <https://dash.cloudflare.com/sign-up>
+   (setup link: <https://dash.cloudflare.com/?to=/:account/r2>)
+2. Open **R2 Object Storage → Create bucket** → name it `bookorbit-backups`.
+3. Open **R2 → Manage R2 API Tokens → Create API Token**.
+   - Permission: **Object Read & Write** (scope to just that bucket if you like).
+   - Copy the **Access Key ID** and **Secret Access Key** — shown once!
+4. Note your **Account ID** (R2 page, top right).
 
-1. Go to <https://console.cloud.google.com/apis/credentials> (create a project if asked, e.g. `rclone-backup`).
-2. Click **+ Create Credentials → OAuth client ID**.
-3. App type: **Desktop app**. Name it `rclone`. Click Create.
-4. Copy the **Client ID** and **Client secret**.
-   (You may first need to configure the **OAuth consent screen**: External, app name, your email as test user. No verification needed for personal use.)
-
-### 3. Authorize rclone for Google Drive (one-time)
-
-On **your laptop** (has a browser), install rclone there too and run:
-
-```bash
-rclone authorize "drive" --client-id=YOUR_CLIENT_ID --client-secret=YOUR_CLIENT_SECRET
-```
-
-A browser opens → sign in to the Google account whose Drive you want to
-use → allow access. The command prints a long **token JSON** — copy it.
-
-Now on the **VPS**:
+### 3. Configure rclone for R2
 
 ```bash
 rclone config
 ```
 
-- `n` (new remote) → name it `gdrive` → type `drive`
-- paste your `client_id` and `client_secret`
-- answer **n** to "Use web browser to automatically authenticate?"
-- paste the token JSON when prompted (`config_token`)
-- accept defaults for the remaining questions, then `q`
+- `n` (new remote) → name it **`r2`** → type **`s3`**
+- `provider`: **`Cloudflare`**
+- `access_key_id`: paste your **Access Key ID**
+- `secret_access_key`: paste your **Secret Access Key**
+- `endpoint`: `https://<YOUR_ACCOUNT_ID>.r2.cloudflarestorage.com`
+- `region`: `auto`
+- accept defaults for the rest, then `q`
 
 Verify:
 
 ```bash
-rclone lsd gdrive:
-# should list your Google Drive folders
+rclone lsd r2:
+# should list bookorbit-backups
 ```
 
 ### 4. Test a backup run
@@ -73,11 +67,9 @@ rclone lsd gdrive:
 cd /path/to/bookorbit
 chmod +x scripts/backup/backup.sh
 ./scripts/backup/backup.sh
-tail -20 scripts/backup/backup.log    # if you've run it via cron
 ```
 
-Check the folders appear in Google Drive:
-`bookorbit-backups/daily/` and `bookorbit-backups/weekly/`.
+Check R2 → `bookorbit-backups/daily/` and `bookorbit-backups/weekly/`.
 
 ### 5. Install the daily cron job
 
@@ -94,8 +86,9 @@ crontab -u root -l   # verify
 **Database (metadata, progress, users):**
 
 ```bash
-# copy the dump onto the server, then restore into a fresh/empty DB
+# pull the dump down, then restore into a fresh/empty DB
 # (run from the repo directory, where docker-compose.yml lives)
+rclone copy r2:bookorbit-backups/daily/bookorbit-20260808.sql.gz .
 gunzip -c bookorbit-20260808.sql.gz | docker compose exec -T bookorbit-db \
   psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"
 ```
@@ -103,45 +96,59 @@ gunzip -c bookorbit-20260808.sql.gz | docker compose exec -T bookorbit-db \
 **Books & app data:**
 
 ```bash
-# extract the weekly archive back into the compose directory
+# download the weekly archive and extract it back into the compose directory
+rclone copy r2:bookorbit-backups/weekly/bookorbit-20260808-full.tar.gz .
 tar -xzf bookorbit-20260808-full.tar.gz -C /path/to/bookorbit
 docker compose up -d   # rebuild containers, data is back
 ```
 
 ## Configuration (environment variables)
 
-| Variable                        | Default             | Meaning                                 |
-| ------------------------------- | ------------------- | --------------------------------------- |
-| `BOOKORBIT_DIR`                 | repo root           | where `docker-compose.yml` lives        |
-| `BACKUP_DIR`                    | `<repo>/backups`    | local staging dir                       |
-| `RCLONE_REMOTE`                 | `gdrive`            | rclone remote name                      |
-| `RCLONE_PATH`                   | `bookorbit-backups` | folder in Drive                         |
-| `KEEP_DAILY`                    | `14`                | number of daily dumps retained          |
-| `KEEP_WEEKLY`                   | `8`                 | number of weekly archives retained      |
-| `WEEKLY_WEEKDAY`                | `0`                 | day of week for full archive (0=Sunday) |
-| `BACKUP_HOUR` / `BACKUP_MINUTE` | `3` / `0`           | cron time (used by install-cron.sh)     |
+| Variable                        | Default             | Meaning                                      |
+| ------------------------------- | ------------------- | -------------------------------------------- |
+| `BOOKORBIT_DIR`                 | repo root           | where `docker-compose.yml` lives             |
+| `BACKUP_DIR`                    | `<repo>/backups`    | local staging dir                            |
+| `RCLONE_REMOTE`                 | `r2`                | rclone remote name (`r2`, `gdrive`, `b2`, …) |
+| `RCLONE_PATH`                   | `bookorbit-backups` | folder in the remote                         |
+| `KEEP_DAILY`                    | `14`                | number of daily dumps retained               |
+| `KEEP_WEEKLY`                   | `8`                 | number of weekly archives retained           |
+| `WEEKLY_WEEKDAY`                | `0`                 | day of week for full archive (0=Sunday)      |
+| `BACKUP_HOUR` / `BACKUP_MINUTE` | `3` / `0`           | cron time (used by install-cron.sh)          |
+
+## Other destinations
+
+The script works with any rclone remote — you only change `RCLONE_REMOTE`.
+
+**Google Drive** (if you prefer Drive): create your own OAuth client first —
+Google retired rclone's shared client in 2026, so the default client fails
+with "authorization error". Create a Desktop-app OAuth client at
+<https://console.cloud.google.com/apis/credentials>, then:
+`rclone authorize "drive" --client-id=... --client-secret=...` on a machine
+with a browser, paste the token into `rclone config` on the VPS, name the
+remote `gdrive`, and set `RCLONE_REMOTE=gdrive`. Then skip to step 4 above.
+
+**Backblaze B2**: create an Application Key (keyID + applicationKey) in the
+B2 console (no OAuth), `rclone config` → type `b2`, name it `b2`, and set
+`RCLONE_REMOTE=b2`.
 
 ## Notes & tips
 
 > 🔐 **Biggest exposure in this setup:** the daily dump folder contains a
 > copy of your `.env` — `JWT_SECRET`, `POSTGRES_PASSWORD` and
-> `SETUP_BOOTSTRAP_TOKEN` — uploaded to Google Drive in **plaintext**.
-> That's fine as long as your Google account stays secure, but anyone with
-> read access to that Drive folder can take over your whole server. If that
+> `SETUP_BOOTSTRAP_TOKEN` — uploaded in **plaintext**. Anyone with access
+> to your R2 token or bucket can take over your whole server. If that
 > bothers you:
 >
 > - skip `.env` entirely (delete it from `backups/daily/` before upload —
 >   secrets can be re-typed from your notes on restore), **or**
-> - use an encrypted destination: rclone `crypt` remote or restic (see below).
+> - use rclone's `crypt` remote as a wrapper for encryption (see below).
 
-- **Storage math (15 GB free tier):** `KEEP_WEEKLY=8` × full library size
-  - 14 dumps ≈ 8× your library. If your books total more than ~1.5 GB,
-    lower `KEEP_WEEKLY` (e.g. 3) or use a Shared Drive with more space.
-- Backups land in your **own Google Drive** — anyone with your Google
-  account can see them (including `.env` secrets). If you want the server
-  unrecoverable-by-compromise, prefer rclone's `crypt` remote or restic.
+- **Storage math (10 GB free tier):** `KEEP_WEEKLY=8` × full library size
+  - 14 dumps ≈ 8× your library. If your books total more than ~1 GB, lower
+    `KEEP_WEEKLY` (e.g. 3) or upgrade the R2 plan.
+- **R2 egress is always free** — restoring costs nothing, ever.
 - The script is safe to re-run any time; it overwrites today's dump.
-- If your library grows past ~12 GB total on Drive, either raise retention
-  values or point `RCLONE_PATH` at a bigger Drive/Shared Drive.
 - To also protect against _accidental deletion on the server_, the local
   `backups/` folder keeps the same retention window — don't `rm -rf` it.
+- For zero-knowledge encryption, configure an rclone `crypt` remote pointing
+  at `r2:bookorbit-backups` and set `RCLONE_REMOTE=bookorbit-encrypted`.
