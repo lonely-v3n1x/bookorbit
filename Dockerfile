@@ -31,7 +31,8 @@ RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
 
 COPY packages/ ./packages/
 COPY server/ ./server/
-RUN pnpm --filter server run build
+# Allow TSC to grow its heap into swap so small (<=1GB) hosts can build without OOM.
+RUN NODE_OPTIONS="--max-old-space-size=2048" pnpm --filter server run build
 
 # pnpm deploy prunes to prod deps; dist/ is gitignored so copy it in after.
 RUN pnpm --config.allow-unused-patches=true --filter server deploy --prod --legacy /deploy
