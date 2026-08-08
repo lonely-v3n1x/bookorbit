@@ -474,6 +474,7 @@
       "tabs": {
         "profile": "Profile",
         "privacy": "Privacy & Sharing",
+        "publicPage": "Public Page",
         "notifications": "Notifications",
         "restrictions": "Restrictions"
       },
@@ -2297,6 +2298,34 @@
         "book-dock": "Book Dock",
         "maintenance": "Maintenance",
         "audit-log": "Audit Log"
+      }
+    },
+    "publicPage": {
+      "title": "Public Page",
+      "subtitle": "Showcase the books you are reading on a public page that needs no login.",
+      "linkTitle": "Your public page",
+      "linkHint": "Anyone with this link can see only the books you add below.",
+      "copyLink": "Copy link",
+      "linkCopied": "Link copied",
+      "open": "Open",
+      "viewPublic": "View my public page",
+      "addTitle": "Add a book",
+      "addHint": "Search your library and add books to your public page.",
+      "searchPlaceholder": "Search books by title or series...",
+      "add": "Add",
+      "alreadyAdded": "On page",
+      "noResults": "No books match your search.",
+      "shelfTitle": "Books on your public page",
+      "empty": "Your public page is empty. Add books above to showcase your reading.",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "remove": "Remove from public page",
+      "rating": "★ {rating}",
+      "saved": "Public page saved",
+      "errors": {
+        "load": "Failed to load your public page.",
+        "save": "Failed to save your public page.",
+        "copy": "Could not copy the link."
       }
     }
   },
@@ -7068,10 +7097,19 @@
     "account": {
       "profile": "Account",
       "privacy": "Privacy & Sharing",
+      "publicPage": "Public Page",
       "notifications": "Notifications",
       "restrictions": "Content Restrictions"
     },
+    "publicShelf": "Public Reading Page",
     "smartScopes": "Smart Scopes",
     "collections": "Collections"
+  },
+  "publicShelf": {
+    "loading": "Loading...",
+    "subtitle": "{count, plural, =0 {No books yet} one {# book on my reading shelf} other {# books on my reading shelf}}",
+    "empty": "This shelf is empty right now.",
+    "notFound": "This page could not be found.",
+    "footer": "Powered by BookOrbit"
   }
 }

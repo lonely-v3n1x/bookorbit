@@ -73,6 +73,7 @@ import { CustomMetadataModule } from './modules/custom-metadata/custom-metadata.
 import { CustomIconModule } from './modules/custom-icon/custom-icon.module';
 import { AccountActivityModule } from './modules/account-activity/account-activity.module';
 import { SharedReadingInsightsModule } from './modules/shared-reading-insights/shared-reading-insights.module';
+import { PublicShelfModule } from './modules/public-shelf/public-shelf.module';
 import { BookDuplicatesModule } from './modules/book-duplicates/book-duplicates.module';
 import { BookMoveModule } from './modules/book-move/book-move.module';
 
@@ -154,6 +155,7 @@ import { BookMoveModule } from './modules/book-move/book-move.module';
     StorygraphModule,
     AccountActivityModule,
     SharedReadingInsightsModule,
+    PublicShelfModule,
     BookDuplicatesModule,
     BookMoveModule,
     BrowseCountsModule,

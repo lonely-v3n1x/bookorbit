@@ -420,6 +420,13 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: (to) => `${t('titles.readPrefix')} · ${fallbackById('titles.book', numericParam(to, 'bookId'))}` },
   },
   {
+    path: '/public/:userId',
+    name: 'public-shelf',
+    component: () => import('@/features/public-shelf/PublicShelfPage.vue'),
+    props: (route) => ({ userId: Number(route.params.userId) }),
+    meta: { public: true, title: () => t('titles.publicShelf') },
+  },
+  {
     path: '/login',
     name: 'login',
     component: () => import('@/features/auth/LoginPage.vue'),

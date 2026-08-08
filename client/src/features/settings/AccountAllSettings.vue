@@ -6,6 +6,7 @@ import AccountSettings from './AccountSettings.vue'
 import NotificationPreferences from '@/features/notifications/components/NotificationPreferences.vue'
 import ContentRestrictionsSettings from './ContentRestrictionsSettings.vue'
 import PrivacySharingSettings from './PrivacySharingSettings.vue'
+import PublicPageSettings from '@/features/public-shelf/PublicPageSettings.vue'
 import { usePermissions } from '@/features/auth/composables/usePermissions'
 import SettingsPageHeader from './SettingsPageHeader.vue'
 import { ACCOUNT_TABS, normalizeAccountTab, type AccountTab as Tab } from './lib/account-tabs'
@@ -75,6 +76,7 @@ function selectTab(tab: Tab) {
 
   <AccountSettings v-if="activeTab === 'profile'" embedded />
   <PrivacySharingSettings v-else-if="activeTab === 'privacy'" />
+  <PublicPageSettings v-else-if="activeTab === 'publicPage'" />
   <NotificationPreferences v-else-if="activeTab === 'notifications'" embedded />
   <ContentRestrictionsSettings v-else-if="activeTab === 'restrictions'" />
 </template>
