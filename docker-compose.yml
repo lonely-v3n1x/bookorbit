@@ -3,7 +3,13 @@ name: bookorbit
 services:
   app:
     container_name: bookorbit-app
-    image: ${APP_IMAGE?required}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # Image tag for the built image. With `build:` set, `docker compose up -d --build`
+    # always compiles from this repo's Dockerfile; override APP_IMAGE to pull a
+    # prebuilt image from a registry instead (requires removing the build section).
+    image: ${APP_IMAGE:-bookorbit:local}
     restart: unless-stopped
     init: true
     env_file:
