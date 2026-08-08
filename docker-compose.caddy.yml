@@ -1,0 +1,44 @@
+# Optional HTTPS reverse proxy using Caddy (automatic Let's Encrypt).
+#
+# Usage on the VPS:
+#   docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d --build
+#
+# Required env (add to .env):
+#   APP_DOMAIN=books.yourdomain.com     # must point its DNS A record at this server
+#   ACME_EMAIL=you@example.com          # optional, for cert expiry notices
+#
+# IMPORTANT: your APP_URL in .env must be https://books.yourdomain.com so the
+# app (and the iOS service worker / PWA offline mode) runs over HTTPS.
+
+services:
+  caddy:
+    container_name: bookorbit-caddy
+    image: caddy:2
+    restart: unless-stopped
+    init: true
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?set APP_DOMAIN in .env to your domain, e.g. books.example.com}
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./data/caddy:/data
+      - ./data/caddy-config:/config
+    depends_on:
+      - app
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost/",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s

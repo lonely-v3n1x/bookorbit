@@ -1,0 +1,20 @@
+# BookOrbit HTTPS reverse proxy (Caddy)
+#
+# The domain is injected from the APP_DOMAIN env var at container start,
+# so this file needs no editing. Caddy automatically obtains and renews a
+# Let's Encrypt certificate for the domain and serves the app on :443.
+#
+# Note: `encode` is intentionally first so gzip/zstd are negotiated before
+# the proxy, and SSE/WebSocket upgrade headers pass straight through.
+
+{$APP_DOMAIN} {
+	encode zstd gzip
+
+	# The app container is reachable by service name on the compose network.
+	reverse_proxy app:3000
+
+	# Sensible request/response size limits (book files can be large).
+	request_body {
+		max_size 2GB
+	}
+}
